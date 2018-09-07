@@ -1,8 +1,9 @@
 # Stripes release procedure
 
-<!-- ../../okapi/doc/md2toc -l 2 release-procedure.md -->
+<!-- md2toc -l 2 release-procedure.md -->
 * [Version numbers, branches and tags](#version-numbers-branches-and-tags)
 * [Before you release](#before-you-release)
+    * [Check dependencies](#check-dependencies)
 * [Release procedure](#release-procedure)
 * [Working towards the next release](#working-towards-the-next-release)
 * [Notes on breaking changes](#notes-on-breaking-changes)
@@ -42,14 +43,18 @@ Ensure that each of the Jira issues listed in the change-log is tagged to the nu
 
 ### Check dependencies
 
-Make sure your `package.json` does not contain any unreleased dependencies.  To check for this, switch back to the `npm-folio` registry, remove your lock file, and attempt to re-install.
+Make sure your `package.json` does not contain any unreleased dependencies -- for example, a bugfix version of stripes-core that adds a new facility, available via the CI repository `folioci` but not from an actual release. To check for this, make a brand new checkout of the module you're working on, outside of any Yarn workspace, switch back to the `npm-folio` registry, and try to install.
 ```
+$ mkdir /tmp/fresh-build
+$ cd /tmp/fresh-build
+$ git clone git@github.com:folio-org/ui-developer.git
+$ cd ui-developer
 $ yarn config set @folio:registry https://repository.folio.org/repository/npm-folio/
-$ rm yarn.lock
 $ yarn install
 ```
 
-Messages received during the install such as, "Package [package] not found" or "Couldn't find any versions for [package] that matches [version]", indicate an unreleased dependency.  Please ensure those packages are properly released to `npm-folio` before continuing.
+Messages received during the install such as, "Package [package] not found" or 
+"Couldn't find any versions for [package] that matches [version]", indicate an unreleased dependency. Please ensure those dependencies are properly released to `npm-folio` before continuing.
 
 
 ## Release procedure
@@ -62,7 +67,7 @@ Messages received during the install such as, "Package [package] not found" or "
 * Push the branch to GitHub, e.g. `git push -u origin v2.3.0`, create a Pull Request for it, and merge it.
 * After the merge, checkout the master branch and create a tag for the specific version to be released, e.g. `git checkout master; git pull; git tag v2.3.0`. If there have been other changes to master since the merge commit, supply the checksum of the merge commit to make sure the tag is applied to the correct commit, e.g. `git tag v2.3.0 c0ffee`.
 * Push the release tag to git, e.g. `git push origin tag v2.3.0`.
-* Publish the package to the npm repository using `npm publish`. (You will need credentials to do this: see note below.)
+* Build and publish release artifacts.  Log into https://jenkins-aws.indexdata.com with your folio-org Github credentials.  Select the project you want to release under the GitHub 'folio-org' folder and select the 'Tags' tab.    Select the Git tag you want to release and then run 'Build Now' to build the release artifacts.  (Note: You may require additional permissions to build the release.  Contact a FOLIO DevOps administrator if needed.) 
 
 
 ## Working towards the next release
@@ -109,22 +114,3 @@ buildNPM {
 
 2. Scope the project `name` in package.json with `@folio`, e.g. `"name": "@folio/react-intl-safe-html"`
 3. Check your job in Jenkins (https://jenkins-aws.indexdata.com/job/folio-org)
-
-## Direct access to the NPM repository
-
-If you need to manually run `yarn publish`, you will need access to the Index Data/FOLIO NPM repository at `repository.folio.org`. Get these credentials from an administrator. Once you have them, login as follows:
-```
-$ npm config set @folio:registry https://repository.folio.org/repository/npm-folio/
-$ npm adduser --registry=https://repository.folio.org/repository/npm-folio/
-Username: mike
-Password: ********
-Email: (this IS public) mike@indexdata.com
-Logged in as mike on https://repository.folio.org/repository/npm-folio/.
-$
-```
-You will then be able to release packages in the relevant repository:
-```
-$ npm publish
-+ @folio/stripes-components@0.0.2
-$
-```

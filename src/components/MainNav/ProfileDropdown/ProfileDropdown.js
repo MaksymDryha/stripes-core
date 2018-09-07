@@ -1,8 +1,5 @@
-/**
- * My profile
- */
-
 import React, { Component } from 'react';
+import { isFunction, kebabCase } from 'lodash';
 import PropTypes from 'prop-types';
 import { FormattedMessage } from 'react-intl';
 import { Dropdown } from '@folio/stripes-components/lib/Dropdown';
@@ -11,13 +8,15 @@ import Avatar from '@folio/stripes-components/lib/Avatar';
 import NavListSection from '@folio/stripes-components/lib/NavListSection';
 import NavListItem from '@folio/stripes-components/lib/NavListItem';
 import List from '@folio/stripes-components/lib/List';
+
 import NavDropdownMenu from '../NavDropdownMenu';
 import NavButton from '../NavButton';
-import css from './MyProfile.css';
+import css from './ProfileDropdown.css';
 import { withModules } from '../../Modules';
-import userDropdownChecks from '../../../userDropdownLinksService';
+import { getHandlerComponent } from '../../../handlerService';
+import validations from '../../../userDropdownLinksService';
 
-class MyProfile extends Component {
+class ProfileDropdown extends Component {
   static propTypes = {
     stripes: PropTypes.shape({
       user: PropTypes.shape({
@@ -39,48 +38,73 @@ class MyProfile extends Component {
 
   static contextTypes = {
     router: PropTypes.object.isRequired,
-  }
+  };
 
   constructor(props) {
     super(props);
 
-    this.state = {
-      dropdownOpen: false,
-      userLinks: [],
-    };
+    this.state = {};
 
     this.toggleDropdown = this.toggleDropdown.bind(this);
     this.getDropdownContent = this.getDropdownContent.bind(this);
     this.getUserData = this.getUserData.bind(this);
     this.getProfileImage = this.getProfileImage.bind(this);
+    this.createHandlerComponent = this.createHandlerComponent.bind(this);
+    this.navigateByUrl = this.navigateByUrl.bind(this);
+
+    const modulesWithLinks = this.getModulesWithLinks();
+    this.userLinks = modulesWithLinks.reduce((acc, m) => {
+      const links = m.links.userDropdown.map((link, index) => this.createLink(link, index, m));
+      return acc.concat(links);
+    }, []);
   }
 
-  componentDidMount() {
-    const { modules, stripes } = this.props;
-    const userDropdownLinks = ([].concat(modules.app, modules.settings))
-      .filter(({ links }) => links && Array.isArray(links.userDropdown))
-      .reduce((result, { links }) => result.concat(links.userDropdown), []);
-
-    userDropdownLinks.forEach((link, index) => {
-      const linkFunction = link.check;
-      if (!linkFunction) {
-        this.createLink(link, index);
-      } else if (typeof userDropdownChecks[linkFunction] === 'function') {
-        if (userDropdownChecks[linkFunction](stripes)) {
-          this.createLink(link, index);
-        }
-      }
-    });
+  setInitialState(callback) {
+    this.setState({
+      dropdownOpen: false,
+      HandlerComponent: null,
+    }, callback);
   }
 
-  createLink(link, index) {
-    const buttonId = `clickable-menuItem${index}`;
-    const newItem = (
-      <NavListItem id={buttonId} key={buttonId} type="button" onClick={() => this.navigateByUrl(link.route)}>
+  getModulesWithLinks() {
+    const { modules } = this.props;
+    return ([].concat(...Object.values(modules)))
+      .filter(({ links }) => links && Array.isArray(links.userDropdown));
+  }
+
+  createHandlerComponent(link, module) {
+    const { stripes } = this.props;
+    const HandlerComponent = getHandlerComponent(link.event, stripes, module);
+
+    // forces to recreate a handler component
+    this.setInitialState(() => this.setState({ HandlerComponent }));
+  }
+
+  createLink(link, index, module) {
+    const { stripes } = this.props;
+    const { check } = link;
+    const checkfn = !check ? undefined : (module.getModule()[check] || validations[check]);
+
+    if (!check || (isFunction(checkfn) && checkfn(stripes))) {
+      return this.renderNavLink(link, index, module);
+    }
+
+    return null;
+  }
+
+  onNavItemClicked(link, module) {
+    const handler = (link.event) ? this.createHandlerComponent : this.navigateByUrl;
+    this.toggleDropdown();
+    handler(link, module);
+  }
+
+  renderNavLink(link, index, module) {
+    const buttonId = `${kebabCase(module.displayName)}-clickable-menuItem${index}`;
+    return (
+      <NavListItem id={buttonId} key={buttonId} type="button" onClick={() => this.onNavItemClicked(link, module)}>
         <FormattedMessage id={link.caption} />
       </NavListItem>
     );
-    this.setState({ userLinks: this.state.userLinks.concat(newItem) });
   }
 
   toggleDropdown() {
@@ -105,18 +129,16 @@ class MyProfile extends Component {
     return (<Avatar alt={user.name} title={user.name} />);
   }
 
-  navigateByUrl = (url) => {
-    this.toggleDropdown();
-    this.context.router.history.push(url);
+  navigateByUrl(link) {
+    this.context.router.history.push(link.route);
   }
 
   onHome = () => {
-    this.navigateByUrl('/');
-  }
+    this.navigateByUrl({ route: '/' });
+  };
 
   getDropdownContent() {
     const { stripes, onLogout } = this.props;
-
     const user = this.getUserData();
     const currentPerms = stripes.user ? stripes.user.perms : undefined;
 
@@ -163,7 +185,7 @@ class MyProfile extends Component {
                   <FormattedMessage id="stripes-core.front.home" />
                 </NavListItem>
             }
-            {this.state.userLinks}
+            {this.userLinks}
             <NavListItem id="clickable-logout" type="button" onClick={onLogout}>
               <FormattedMessage id="stripes-core.logout" />
             </NavListItem>
@@ -175,16 +197,20 @@ class MyProfile extends Component {
   }
 
   render() {
-    const { dropdownOpen } = this.state;
+    const { dropdownOpen, HandlerComponent } = this.state;
+
     return (
-      <Dropdown open={dropdownOpen} id="profileDropdown" onToggle={this.toggleDropdown} pullRight hasPadding>
-        <NavButton data-role="toggle" title="My Profile" selected={dropdownOpen} icon={this.getProfileImage()} noSelectedBar />
-        <NavDropdownMenu data-role="menu" onToggle={this.toggleDropdown}>
-          {this.getDropdownContent()}
-        </NavDropdownMenu>
-      </Dropdown>
+      <div>
+        { HandlerComponent && <HandlerComponent stripes={this.props.stripes} /> }
+        <Dropdown open={dropdownOpen} id="profileDropdown" onToggle={this.toggleDropdown} pullRight hasPadding>
+          <NavButton data-role="toggle" title="My Profile" selected={dropdownOpen} icon={this.getProfileImage()} noSelectedBar />
+          <NavDropdownMenu data-role="menu" onToggle={this.toggleDropdown}>
+            {this.getDropdownContent()}
+          </NavDropdownMenu>
+        </Dropdown>
+      </div>
     );
   }
 }
 
-export default withModules(MyProfile);
+export default withModules(ProfileDropdown);

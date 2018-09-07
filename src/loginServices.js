@@ -6,14 +6,12 @@ import { addLocaleData } from 'react-intl';
 import { translations } from 'stripes-config'; // eslint-disable-line
 
 import {
-  setCurrentUser,
   clearCurrentUser,
   setCurrentPerms,
   setLocale,
   setTimezone,
   setPlugins,
   setBindings,
-  setOkapiToken,
   setTranslations,
   clearOkapiToken,
   setAuthError,
@@ -35,7 +33,7 @@ function getHeaders(tenant, token) {
 export function loadTranslations(store, locale) {
   const parentLocale = locale.split('-')[0];
   return import(`react-intl/locale-data/${parentLocale}`)
-    .then(intlData => addLocaleData(intlData))
+    .then(intlData => addLocaleData(intlData.default || intlData))
     .then(() => fetch(translations[parentLocale]))
     .then((response) => {
       if (response.ok) {
@@ -125,47 +123,28 @@ function clearOkapiSession(store, resp) {
   });
 }
 
-function processServicePoint(resp) {
-  const { servicepoints } = resp;
-  if (!servicepoints.length) return null;
-  return servicepoints[0];
-}
-
-function processUserServicePoints(resp) {
-  const { servicePointsUsers } = resp;
-  if (!servicePointsUsers.length) return null;
-  return servicePointsUsers[0].defaultServicePointId;
-}
-
-function getServicePoint(okapiUrl, tenant, store, currentUser, servicePointId) {
-  if (!servicePointId) return null;
-  const headers = getHeaders(tenant, store.getState().okapi.token);
-  return fetch(`${okapiUrl}/service-points?query=(id==${servicePointId})`, { headers })
-    .then(resp => ((resp.status < 400) ? resp.json().then(processServicePoint) : null));
-}
-
-function getUserServicePoints(okapiUrl, tenant, store, currentUser) {
-  const headers = getHeaders(tenant, store.getState().okapi.token);
-  fetch(`${okapiUrl}/service-points-users?query=(userId==${currentUser.id})`, { headers })
-    .then(resp => ((resp.status < 400) ? resp.json().then(processUserServicePoints) : null))
-    .then(servicePointId => getServicePoint(...arguments, servicePointId)) // eslint-disable-line prefer-rest-params
-    .then(servicePoint => {
-      if (servicePoint) {
-        store.dispatch(setCurrentServicePoint(servicePoint));
-      }
-    });
+function loadResources(okapiUrl, store, tenant) {
+  getLocale(okapiUrl, store, tenant);
+  getPlugins(okapiUrl, store, tenant);
+  getBindings(okapiUrl, store, tenant);
 }
 
 function createOkapiSession(okapiUrl, store, tenant, token, data) {
+  const servicePoints = _.get(data, ['servicePointsUser', 'servicePoints'], []);
+  const curSpId = _.get(data, ['servicePointsUser', 'defaultServicePointId']);
+  const curServicePoint = (!curSpId && servicePoints.length === 1) ?
+    servicePoints[0] :
+    servicePoints.find(sp => sp.id === curSpId);
+
   const user = {
     id: data.user.id,
     username: data.user.username,
     ...data.user.personal,
+    servicePoints,
+    curServicePoint,
   };
 
-  store.dispatch(setOkapiToken(token));
   store.dispatch(setAuthError(null));
-  store.dispatch(setCurrentUser(user));
 
   // You are not expected to understand this
   // ...then aren't you expected to explain it?
@@ -177,10 +156,9 @@ function createOkapiSession(okapiUrl, store, tenant, token, data) {
     perms,
   };
   localforage.setItem('okapiSess', okapiSess);
-  getLocale(okapiUrl, store, tenant);
-  getPlugins(okapiUrl, store, tenant);
-  getBindings(okapiUrl, store, tenant);
-  getUserServicePoints(okapiUrl, tenant, store, user);
+  store.dispatch(setSessionData(okapiSess));
+
+  loadResources(okapiUrl, store, tenant);
 }
 
 // Validate stored token by attempting to fetch /users
@@ -194,10 +172,7 @@ function validateUser(okapiUrl, store, tenant, session) {
     } else {
       const { token, user, perms } = session;
       store.dispatch(setSessionData({ token, user, perms }));
-      getLocale(okapiUrl, store, tenant);
-      getPlugins(okapiUrl, store, tenant);
-      getBindings(okapiUrl, store, tenant);
-      getUserServicePoints(okapiUrl, tenant, store, user);
+      loadResources(okapiUrl, store, tenant);
     }
   }).catch(() => {
     store.dispatch(setServerDown());
@@ -216,6 +191,10 @@ function isSSOEnabled(okapiUrl, store, tenant) {
           store.dispatch(checkSSO(json.active));
         });
       }
+      store.dispatch(setOkapiReady());
+    })
+    .catch(() => {
+      store.dispatch(checkSSO(false));
       store.dispatch(setOkapiReady());
     });
 }
@@ -295,4 +274,12 @@ export function requestSSOLogin(okapiUrl, tenant) {
     body: JSON.stringify({ stripesUrl }),
   })
     .then(resp => processSSOLoginResponse(resp));
+}
+
+export function setCurServicePoint(store, servicePoint) {
+  localforage.getItem('okapiSess').then((sess) => {
+    sess.user.curServicePoint = servicePoint;
+    localforage.setItem('okapiSess', sess);
+    store.dispatch(setCurrentServicePoint(servicePoint));
+  });
 }
