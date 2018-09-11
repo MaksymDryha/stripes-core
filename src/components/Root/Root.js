@@ -18,7 +18,7 @@ import { getQueryResourceKey, getCurrentModule } from '../../locationService';
 import Stripes from '../../Stripes';
 import RootWithIntl from '../../RootWithIntl';
 import SystemSkeleton from '../SystemSkeleton';
-import idleTimers from '../IdleTimer';
+import idleTimer from '../IdleTimer';
 import './Root.css';
 
 import { metadata } from 'stripes-config'; // eslint-disable-line
@@ -106,7 +106,7 @@ class Root extends Component {
       locale,
       timezone,
       metadata,
-      setIdleTimer: (onActive, onIdle, timeout) => idleTimers(onActive, onIdle, timeout, rootdocument),
+      setIdleTimer: (onActive, onIdle, timeout) => idleTimer(onActive, onIdle, timeout, rootdocument),
       setLocale: (localeValue) => { loadTranslations(store, localeValue); },
       setTimezone: (timezoneValue) => { store.dispatch(setTimezone(timezoneValue)); },
       plugins: plugins || {},
