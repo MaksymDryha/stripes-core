@@ -7,11 +7,13 @@ function runTest(tests) {
 
   describe(`matching for version ${expected} (${title})`, function () {
     tests.forEach((list, i) => {
-      const matches = (i === 0);
-      it((matches ? 'accepts good' : 'rejects bad') + ' matches', function () {
+      const expectMatch = (i === 0);
+      it((expectMatch ? 'accepts good' : 'rejects bad') + ' matches', function () {
         list.forEach((got) => {
-          // console.log(i, got);
-          expect(isVersionCompatible(got, expected)).to.equal(matches);
+          console.log(`-testing '${got}', expecting ${expectMatch ? '' : 'no '}match`);
+          const match = isVersionCompatible(got, expected);
+          console.log(`++got ${match}`);
+          expect(match).to.equal(expectMatch);
         });
       });
     });
