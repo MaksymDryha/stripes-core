@@ -1,3 +1,5 @@
+import semver from 'semver';
+
 /*
  * This function probes Okapi to discover what versions of what
  * interfaces are supported by the services that it is proxying
@@ -79,6 +81,11 @@ export function discoveryReducer(state = {}, action) {
 }
 
 export function isVersionCompatible(got, wanted) {
+  console.log('+in isVersionCompatible');
+  const val = semver.satisfies(got, `${wanted}`);
+  console.log('+still in isVersionCompatible');
+  console.log(`--semver.satisfies('${got}', '^${wanted}') -> ${val}`);
+  return val;
   const [gmajor, gminor] = got.split('.');
   const [wmajor, wminor] = wanted.split('.');
   return wmajor === gmajor && parseInt(wminor, 10) <= parseInt(gminor, 10);
