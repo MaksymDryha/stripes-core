@@ -1,6 +1,6 @@
 # Change history for stripes-core
 
-## 2.16.0 (IN PROGRESS)
+## 3.0.0 (IN PROGRESS)
 
 * Set `textComponent` on `<IntlProvider>`
 * Fixed `MainNav` not setting the correct app as `selected`.
